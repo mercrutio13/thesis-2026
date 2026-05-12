@@ -24,17 +24,24 @@ cleandata <- function(datafile) {
         m == "N" ~ 0,
         m == "D" ~ 1,
       ),
-      sindex = as.integer(str_extract(stimulusfile, "\\d+")),
-      sconst = (((sindex - 1) %% 18) %/% 3) + 1,
+      index = as.integer(str_extract(stimulusfile, "\\d+")),
+      sconst = (((index - 1) %% 18) %/% 3) + 1,
+      construction = case_when(
+        sconst == 1 ~ "Time preposition",
+        sconst == 2 ~ "Subject relative clause",
+        sconst == 3 ~ "Perfect auxilliary",
+        sconst == 4 ~ "Definite plural",
+        sconst == 5 ~ "Indefinite plural",
+        sconst == 6 ~ "Definite noun phrase",
+      ),
       speaker = str_extract(stimulusfile, ".(?=\\.mp3$)"),
       correct = as.logical(Correct)) |>
     group_by(pid) |>
     mutate(id = cur_group_id()) |>
     ungroup() |>
     select(id,
-           pid,
-           sindex,
-           sconst,
+           index,
+           construction,
            conf,
            phonology,
            morphology,
@@ -45,12 +52,12 @@ cleandata <- function(datafile) {
 
 remove_errdata <- function(datain) {
   errdata <- datain |>
-    group_by(sindex, conf) |>
+    group_by(index, conf) |>
     summarise(n = n(), err = (n() - sum(correct)), .groups = "drop_last") |>
     filter(conf == "NPNM" & (err > 1 | (err == 1 & n == 1)))
   anti_join(datain, 
             errdata,
-            by = join_by(sindex))
+            by = join_by(index))
 }
 
 #Load data and demographic data
@@ -63,7 +70,7 @@ data |>
 
 #Look for high error rates in NPNM
 data |>
-  group_by(sindex, conf) |>
+  group_by(index, conf) |>
   summarise(pcorr = sum(correct)/n(), 
             err = (n() - sum(correct)), n = n(), 
             meanrtime = mean(Reaction.Time)) |>
@@ -119,15 +126,60 @@ nerrdata |>
   ggplot(aes(x = conf, y = Reaction.Time)) +
   geom_boxplot(mapping = aes(fill = correct), alpha =0.5)+
   labs(x = "Configuration", y = "Mean response time", fill = "Response") +
-  scale_y_continuous(label = function(x) {return(paste(x, " ms"))}) +
+  scale_y_log10(label = function(x) {return(paste(x, "ms"))}) +
   scale_x_discrete(limits=rev) +
   theme_ggstatsplot() +
   theme(axis.title = element_text(color = "darkred", size = 14)) +
   scale_fill_brewer(palette="Dark2", labels = c("Incorrect", "Correct"))
 
-#Linear mixed-effect regression
+#Removing incorrect results from dataset
 corrdata <- filter(nerrdata, correct == TRUE)
 
+#One-way ANOVA for speaker
+n.data <- corrdata |>
+  filter(speaker %in% c("e","p"))
+Anova(aov(Reaction.Time ~ speaker, data = n.data), type = 2)
+
+d.data <- corrdata |>
+  filter(speaker %in% c("m","s"))
+Anova(aov(Reaction.Time ~ speaker, data = d.data), type = 2)
+
+n.data |>
+  ggplot(aes(x = speaker, y = Reaction.Time, fill = speaker)) +
+  geom_boxplot(alpha = 0.5) +
+  labs(x = "Speaker", y = "Response Time") +
+  scale_x_discrete(limits=rev) +
+  scale_y_log10(label = function(x) {return(paste(x, "ms"))}) +
+  theme_ggstatsplot() +
+  theme(legend.position = "none",
+        axis.title = element_text(color = "darkred", size = 14)) +
+  scale_fill_brewer(palette="Dark2")
+
+d.data |>
+  ggplot(aes(x = speaker, y = Reaction.Time, fill = speaker)) +
+  geom_boxplot(alpha = 0.5) +
+  labs(x = "Speaker", y = "Response Time") +
+  scale_x_discrete(limits=rev) +
+  scale_y_log10(label = function(x) {return(paste(x, "ms"))}) +
+  theme_ggstatsplot() +
+  theme(legend.position = "none",
+        axis.title = element_text(color = "darkred", size = 14)) +
+  scale_fill_brewer(palette="Dark2")
+
+
+#Construction effect analysis
+Anova(aov(Reaction.Time ~ construction, data = corrdata), type=2)
+corrdata |>
+  ggplot(aes(x = construction, y = Reaction.Time, fill = construction)) +
+  geom_boxplot(alpha =0.5) +
+  labs(x = "Construction", y = "Response time", fill = "Construction") +
+  scale_y_log10(label = function(x) {return(paste(x, "ms"))}) +
+  theme_ggstatsplot() +
+  theme(axis.title = element_text(color = "darkred", size = 14),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank())
+
+#Linear mixed-effect regression
 library(lme4)
 library(merTools)
 library(lmerTest)
@@ -135,7 +187,7 @@ library(MuMIn)
 
 corr_model <- lmer(Reaction.Time ~ 
                      phonology + morphology 
-                      + (1 | id) + (1 | sconst / sindex), 
+                      + (1 | id) + (1 | construction / index), 
                    data = corrdata)
 summary(corr_model)
 fixef(corr_model)
@@ -168,7 +220,7 @@ getR2 <- function(modelin) {
 
 rcorr_model <- rlmer(Reaction.Time ~ 
                        phonology + morphology 
-                        + (1 | id) + (1 | sconst / sindex), 
+                        + (1 | id) + (1 | construction / index), 
                      data = corrdata)
 summary(rcorr_model)
 fixef(rcorr_model)
@@ -178,7 +230,7 @@ getR2(rcorr_model)
 #Log transformed data
 corr_log_model <- lmer(log(Reaction.Time) ~ 
                          phonology + morphology 
-                          + (1 | id) + (1 | sconst / sindex), 
+                          + (1 | id) + (1 | construction / index), 
                        data = corrdata)
 summary(corr_log_model)
 fixef(corr_log_model)
@@ -189,7 +241,7 @@ ggqqplot(log(corrdata$Reaction.Time))
 
 rcorr_log_model <- rlmer(log(Reaction.Time) ~ 
                            phonology + morphology 
-                            + (1 | id) + (1 | sconst / sindex), 
+                            + (1 | id) + (1 | construction / index), 
                          data = corrdata)
 summary(rcorr_log_model)
 fixef(rcorr_log_model)
@@ -212,3 +264,17 @@ modelplot(models[1:2], coef_omit = "Intercept|SD",
           title = "Coefficient estimates and 95% confidence intervals for linear models")
 modelplot(models[3:4], coef_omit = "Intercept|SD", 
           title = "Coefficient estimates and 95% confidence intervals for linear models")
+
+#Equivalence test
+diff_corrdata <- corrdata |>
+  mutate(pmsum = phonology + morphology,
+         pmdif = phonology - morphology)
+corr_log_diff_model <- lmer(log(Reaction.Time) ~ pmsum + pmdif 
+                            + (1 | id) + (1 | construction / index), 
+                            data = diff_corrdata )
+summary(corr_log_diff_model)
+
+corr_log_comp_model <- lmer(log(Reaction.Time) ~ I(phonology + morphology) 
+                            + (1 | id) + (1 | construction / index), 
+                            data = corrdata )
+anova(corr_log_model, corr_log_comp_model)
