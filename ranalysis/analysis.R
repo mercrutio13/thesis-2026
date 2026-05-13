@@ -82,7 +82,9 @@ nerrdata <- remove_errdata(data)
 
 #Correctness Analysis 
 library(car)
+library(ggstatsplot)
 
+#Two-way ANOVA for phonology/morphology
 mpcorrdata <- nerrdata |>
   group_by(id, conf) |>
   summarise(x = sum(correct),
@@ -99,10 +101,12 @@ mpcorrdata <- nerrdata |>
          morphology = case_when(
            m == "N" ~ 0,
            m == "D" ~ 1,
-         ),
-        )
+         )
+  )
 
-library(ggstatsplot)
+summary(aov(r ~ phonology * morphology, data = mpcorrdata)) 
+Anova(aov(r ~ phonology + morphology, data = mpcorrdata), type = 2) 
+
 mpcorrdata |>
   ggplot(aes(x = conf, y = xp, fill = conf)) +
   geom_boxplot(alpha = 0.5) +
@@ -114,9 +118,74 @@ mpcorrdata |>
         axis.title = element_text(color = "darkred", size = 14)) +
   scale_fill_brewer(palette="Dark2")
 
-  #Two-way ANOVA for phonology/morphology
-summary(aov(r ~ phonology * morphology, data = mpcorrdata)) 
-Anova(aov(r ~ phonology + morphology, data = mpcorrdata), type = 2) 
+# One-way ANOVA for Norweigan speakers
+mp_speaker_n <- nerrdata |>
+  group_by(id, speaker) |>
+  summarise(n = n(),
+            x = sum(correct),
+            xp = x/n(),
+            t = asin(sqrt(x/(n()+1))) + asin(sqrt((x+1)/(n()+1))),
+            r = 46.47324337*t - 23,
+            .groups = "drop_last") |>
+  filter(speaker %in% c("e", "p"))
+summary(aov(r ~ speaker, data = mp_speaker_n))
+
+mp_speaker_n |>
+  ggplot(aes(x = speaker, y = xp, fill = speaker)) +
+  geom_boxplot(alpha = 0.5) +
+  labs(x = "Configuration", y = "Mean percentage correct") +
+  scale_y_continuous(label = function(x) {return(paste(x*100, "%"))}) +
+  scale_x_discrete(limits=rev) +
+  theme_ggstatsplot() +
+  theme(legend.position = "none",
+        axis.title = element_text(color = "darkred", size = 14)) +
+  scale_fill_brewer(palette="Dark2")
+
+# One-way ANOVA for Danish speakers
+mp_speaker_d <- nerrdata |>
+  group_by(id, speaker) |>
+  summarise(n = n(),
+            x = sum(correct),
+            xp = x/n(),
+            t = asin(sqrt(x/(n()+1))) + asin(sqrt((x+1)/(n()+1))),
+            r = 46.47324337*t - 23,
+            .groups = "drop_last") |>
+  filter(speaker %in% c("m", "s"))
+summary(aov(r ~ speaker, data = mp_speaker_d))
+
+mp_speaker_d |>
+  ggplot(aes(x = speaker, y = xp, fill = speaker)) +
+  geom_boxplot(alpha = 0.5) +
+  labs(x = "Configuration", y = "Mean percentage correct") +
+  scale_y_continuous(label = function(x) {return(paste(x*100, "%"))}) +
+  scale_x_discrete(limits=rev) +
+  theme_ggstatsplot() +
+  theme(legend.position = "none",
+        axis.title = element_text(color = "darkred", size = 14)) +
+  scale_fill_brewer(palette="Dark2")
+
+# One-way ANOVA for construction
+mp_const <- nerrdata |>
+  group_by(id, construction) |>
+  summarise(n = n(),
+            x = sum(correct),
+            xp = x/n(),
+            t = asin(sqrt(x/(n()+1))) + asin(sqrt((x+1)/(n()+1))),
+            r = 46.47324337*t - 23,
+            .groups = "drop_last") 
+
+summary(aov(r ~ construction, data = mp_const))
+
+mp_const |>
+  ggplot(aes(x = construction, y = xp, fill = construction)) +
+  geom_boxplot(alpha = 0.5) +
+  labs(x = "Configuration", y = "Mean percentage correct") +
+  scale_y_continuous(label = function(x) {return(paste(x*100, "%"))}) +
+  scale_x_discrete(limits=rev) +
+  theme_ggstatsplot() +
+  theme(legend.position = "none",
+        axis.title = element_text(color = "darkred", size = 14)) +
+  scale_fill_brewer(palette="Dark2")
 
 #Response Time Analysis
   #One-way ANOVA for correctness
@@ -178,6 +247,19 @@ corrdata |>
   theme(axis.title = element_text(color = "darkred", size = 14),
         axis.text.x = element_blank(),
         axis.title.x = element_blank())
+
+p_const <- mp_const |> 
+  group_by(construction)|> 
+  summarize(correctness = mean(xp)) 
+mrt_const <- corrdata |> 
+  group_by(construction) |> 
+  summarise(mean.reaction.time = mean(Reaction.Time)) 
+const_data <- inner_join(p_const, mrt_const) 
+
+const_data|>
+  arrange(correctness)
+const_data|>
+  arrange(desc(mean.reaction.time))
 
 #Linear mixed-effect regression
 library(lme4)
