@@ -60,7 +60,7 @@ remove_errdata <- function(datain) {
             by = join_by(index))
 }
 
-#Load data and demographic data
+#Load data
 data <- cleandata("data-raw.csv")
 
 #Plot Reaction Time by participant, consider outliers
@@ -207,11 +207,11 @@ corrdata <- filter(nerrdata, correct == TRUE)
 #One-way ANOVA for speaker
 n.data <- corrdata |>
   filter(speaker %in% c("e","p"))
-Anova(aov(Reaction.Time ~ speaker, data = n.data), type = 2)
+summary(aov(Reaction.Time ~ speaker, data = n.data))
 
 d.data <- corrdata |>
   filter(speaker %in% c("m","s"))
-Anova(aov(Reaction.Time ~ speaker, data = d.data), type = 2)
+summary(aov(Reaction.Time ~ speaker, data = d.data))
 
 n.data |>
   ggplot(aes(x = speaker, y = Reaction.Time, fill = speaker)) +
@@ -268,8 +268,7 @@ library(lmerTest)
 library(MuMIn)
 
 corr_model <- lmer(Reaction.Time ~ 
-                     phonology + morphology 
-                      + (1 | id) + (1 | construction / index), 
+                     phonology + morphology + (1 | id) + (1 | construction / index), 
                    data = corrdata)
 summary(corr_model)
 fixef(corr_model)
@@ -301,8 +300,7 @@ getR2 <- function(modelin) {
 }
 
 rcorr_model <- rlmer(Reaction.Time ~ 
-                       phonology + morphology 
-                        + (1 | id) + (1 | construction / index), 
+                       phonology + morphology + (1 | id) + (1 | construction / index), 
                      data = corrdata)
 summary(rcorr_model)
 fixef(rcorr_model)
@@ -311,8 +309,7 @@ getR2(rcorr_model)
 
 #Log transformed data
 corr_log_model <- lmer(log(Reaction.Time) ~ 
-                         phonology + morphology 
-                          + (1 | id) + (1 | construction / index), 
+                         phonology + morphology + (1 | id) + (1 | construction / index), 
                        data = corrdata)
 summary(corr_log_model)
 fixef(corr_log_model)
@@ -322,8 +319,7 @@ getR2(corr_log_model)
 ggqqplot(log(corrdata$Reaction.Time))
 
 rcorr_log_model <- rlmer(log(Reaction.Time) ~ 
-                           phonology + morphology 
-                            + (1 | id) + (1 | construction / index), 
+                           phonology + morphology + (1 | id) + (1 | construction / index), 
                          data = corrdata)
 summary(rcorr_log_model)
 fixef(rcorr_log_model)
@@ -345,18 +341,18 @@ modelsummary(models, stars = TRUE, gof_omit = "IC|Adj|F|RMSE|Log") |>
 modelplot(models[1:2], coef_omit = "Intercept|SD", 
           title = "Coefficient estimates and 95% confidence intervals for linear models")
 modelplot(models[3:4], coef_omit = "Intercept|SD", 
-          title = "Coefficient estimates and 95% confidence intervals for linear models")
+          title = "Coefficient estimates and 95% confidence intervals for log-linear models")
 
 #Equivalence test
 diff_corrdata <- corrdata |>
   mutate(pmsum = phonology + morphology,
          pmdif = phonology - morphology)
-corr_log_diff_model <- lmer(log(Reaction.Time) ~ pmsum + pmdif 
-                            + (1 | id) + (1 | construction / index), 
+corr_log_diff_model <- lmer(log(Reaction.Time) ~ 
+                              pmsum + pmdif + (1 | id) + (1 | construction / index), 
                             data = diff_corrdata )
 summary(corr_log_diff_model)
 
-corr_log_comp_model <- lmer(log(Reaction.Time) ~ I(phonology + morphology) 
-                            + (1 | id) + (1 | construction / index), 
+corr_log_comp_model <- lmer(log(Reaction.Time) ~ 
+                              I(phonology + morphology) + (1 | id) + (1 | construction / index), 
                             data = corrdata )
 anova(corr_log_model, corr_log_comp_model)
